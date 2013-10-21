@@ -18,7 +18,7 @@ import os
 import site
 import sys
 
-from os.path import basename, exists, isdir, islink, join
+from os.path import basename, dirname, exists, isdir, islink, join
 
 
 MODULE_EXTENSIONS = ['', '.py', '.pyc', '.pyo']
@@ -49,7 +49,7 @@ def main(args=None):
     else:
         venvsitedir = distutils.sysconfig.get_python_lib()
 
-    if not exists(join(venvsitedir, 'no-global-site-packages.txt')):
+    if not exists(join(dirname(venvsitedir), 'no-global-site-packages.txt')):
         print("This virtual environment includes system site-packages. "
             "Nothing to do.")
         return 1
