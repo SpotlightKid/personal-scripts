@@ -12,6 +12,10 @@
 
 """
 
+__author__ = "Christopher Arndt"
+__version__ = "1.0 ($Rev$)"
+__license__ = "MIT License"
+
 import argparse
 import getpass
 import os
@@ -27,8 +31,7 @@ try:
 except ImportError:
     passlib = False
 
-# We need a crypt module, but Windows doesn't have one by default.
-# Try to find one, and tell the user if we can't.
+# Try to import different versions of crypt function
 try:
     from crypt import crypt
 except ImportError:
@@ -42,7 +45,7 @@ except ImportError:
             crypt = None
 
 def make_salt(length=2):
-    """Returns a string of random letters of given length."""
+    """Return string of random letters of given length."""
     letters = ('abcdefghijklmnopqrstuvwxyz'
         'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
         '0123456789/.')
@@ -54,8 +57,12 @@ def crypt_passwd(password, salt=None):
 
 
 class HtpasswdFile(OrderedDict):
-    """A class for manipulating htpasswd files."""
+    """Create, read, update and write htpasswd files.
 
+    Sub-classes ``collections.OrderedDict``, so users and pasword hashes can
+    be accessed in a dictionary-like fashion, but order of entries is retained.
+
+    """
     def __init__(self, filename, create=False):
         super(HtpasswdFile, self).__init__()
         self.filename = filename
@@ -76,7 +83,7 @@ class HtpasswdFile(OrderedDict):
         return self.get(username, default)
 
     def read(self, filename=None):
-        """Read the htpasswd file into memory.
+        """Read htpasswd file into memory.
 
         If filename is given, read this file instead and set filename attribute
         to it.
@@ -111,7 +118,10 @@ class HtpasswdFile(OrderedDict):
 
 
 def main(args=None):
-    """
+    """Command line interface compatible with original htpasswd utility.
+
+    Pass options and positional arguments as a list of strings.
+
     """
     doclines = __doc__.splitlines()
     usage = "\n".join(doclines[1:])
