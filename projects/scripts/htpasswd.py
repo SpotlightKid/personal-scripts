@@ -97,7 +97,7 @@ class HtpasswdFile(OrderedDict):
         with open(self.filename, 'r') as htpasswd:
             for line in htpasswd:
                 username, pwhash = line.split(':', 1)
-                self[username.strip()] = pwwhash.strip()
+                self[username.strip()] = pwhash.strip()
 
     def save(self, filename=None):
         """Write htpasswd to file given by filename argument or attribute."""
