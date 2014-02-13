@@ -21,7 +21,7 @@ import sys
 from os.path import basename, dirname, exists, isdir, islink, join
 
 
-MODULE_EXTENSIONS = ['', '.py', '.pyc', '.pyo']
+MODULE_EXTENSIONS = ['', '.pth', '.py', '.pyc', '.pyo']
 
 if sys.platform.startswith('win'):
     MODULE_EXTENSIONS += ['.dll', '.pyd']
