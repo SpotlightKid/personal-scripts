@@ -88,6 +88,9 @@ def main(args=None):
             if ((ext == '' and exists(join(pkgdir, '__init__.py'))) or
                     exists(module)):
                 try:
+                    if exists(venvpackage + ext) and args.force:
+                        os.unlink(venvpackage + ext)
+
                     os.symlink(module, venvpackage + ext)
                     print("Created symlink: %s -> %s" %
                         (module, venvpackage + ext))
