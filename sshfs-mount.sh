@@ -5,6 +5,13 @@
 # Mount directory from a filserver via SSHfs and open file manager
 #
 
+if [ "x$1" = "x-u" ]; then
+    ACTION="umount"
+    shift
+else
+    ACTION="mount"
+fi
+
 HOST="${1:-dockstar3}"
 REMOTE_DIR="${2:-/mnt/explorer}"
 LOCAL_DIR="${3:-${HOME}/mnt/${HOST}-${REMOTE_DIR##*/}}"
@@ -15,7 +22,16 @@ is_mounted() {
     return $?
 }
 
-if ! is_mounted "$HOST:$REMOTE_DIR" ; then
+if is_mounted "$HOST:$REMOTE_DIR" ; then
+    if [ "x$ACTION" = "xumount" ]; then
+        if tty -s ; then
+            echo "Unmounting $HOST:$REMOTE_DIR..."
+        fi
+
+        fusermount -u "$LOCAL_DIR"
+        exit 0
+    fi
+else
     if tty -s ; then
         echo "Mounting $HOST:$REMOTE_DIR at $LOCAL_DIR..."
     fi
@@ -32,3 +48,4 @@ else
             --text="Could not mount $HOST:$REMOTE_DIR."
     fi
 fi
+
