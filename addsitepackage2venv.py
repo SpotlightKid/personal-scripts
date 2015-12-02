@@ -15,6 +15,7 @@ __usage__ = "Usage: addsitepackage2venv <package>"
 
 import argparse
 import distutils.sysconfig
+import logging
 import glob
 import os
 import site
@@ -22,7 +23,7 @@ import sys
 
 from os.path import basename, dirname, exists, isdir, islink, join
 
-
+log = logging.getLogger("addsitepackage2venv")
 MODULE_EXTENSIONS = ['', '.pth', '.py', '.pyc', '.pyo']
 
 if sys.platform.startswith('win'):
@@ -35,6 +36,8 @@ def main(args=None):
     argparser = argparse.ArgumentParser()
     argparser.add_argument('-f', '--force',
         action="store_true", help="Overwrite existing symlinks")
+    argparser.add_argument('-q', '--quiet',
+        action="store_true", help="Only print errors")
     argparser.add_argument('-v', '--verbose',
         action="store_true", help="Be more verbose")
     argparser.add_argument('packages', nargs='+',
@@ -42,18 +45,26 @@ def main(args=None):
 
     args = argparser.parse_args(args if args is not None else sys.argv[1:])
 
+    if args.quiet:
+        loglevel = logging.ERROR
+    elif args.verbose:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+
+    logging.basicConfig(level=loglevel, format="%(message)s")
     venv = os.environ.get('VIRTUAL_ENV')
 
     if not venv:
         argparser.print_help()
-        print("No virtual environment active.")
+        log.error("No virtual environment active.")
         return 1
     else:
         venvsitedir = distutils.sysconfig.get_python_lib()
 
     if not exists(join(dirname(venvsitedir), 'no-global-site-packages.txt')):
-        print("This virtual environment includes system site-packages. "
-            "Nothing to do.")
+        log.info("This virtual environment includes system site-packages. "
+                 "Nothing to do.")
         return 1
 
     for package in args.packages:
@@ -64,11 +75,11 @@ def main(args=None):
 
             if ((ext == '' and glob.glob(join(venvpackage, '__init__.py*'))) or
                     exists(venvmodule)):
-                print("Package %s is already in installed in '%s' as '%s'." %
-                    (package, venvsitedir, basename(venvpackage + ext)))
+                log.info("Package %s is already present in '%s' as '%s'." %
+                         (package, venvsitedir, basename(venvmodule)))
 
-                if islink(venvpackage + ext):
-                    print("Symlinks to: %s" % os.readlink(venvpackage + ext))
+                if islink(venvmodule):
+                    log.info("Symlinks to: %s" % os.readlink(venvmodule))
 
                 if not args.force:
                     return 1
@@ -78,16 +89,14 @@ def main(args=None):
     for package in args.packages:
         venvpackage = join(venvsitedir, package)
 
-        if args.verbose:
-            print("Checking for package '%s'..." % package)
+        log.debug("Checking for package '%s'..." % package)
 
         for sitedir in sys.path:
             if (not sitedir or not isdir(sitedir) or sitedir.startswith(venv)
                     or sitedir == dirname(sys.argv[0])):
                 continue
 
-            if args.verbose:
-                print("Checking directory '%s'..." % sitedir)
+            log.debug("Checking directory '%s'..." % sitedir)
 
             pkgdir = join(sitedir, package)
 
@@ -102,19 +111,19 @@ def main(args=None):
                             os.unlink(venvpackage + ext)
 
                         os.symlink(module, venvpackage + ext)
-                        print("Created symlink: %s -> %s" %
-                            (module, venvpackage + ext))
+                        log.info("Created symlink: %s -> %s" %
+                                 (module, venvpackage + ext))
                     except (IOError, OSError) as exc:
-                        print("Could not create symlink %s -> %s: %s" %
-                            (module, venvpackage + ext, exc))
+                        log.error("Could not create symlink %s -> %s: %s" %
+                                  (module, venvpackage + ext, exc))
                     found = True
 
             if found:
                 break
 
         else:
-            print("No package '%s' found in site-packages directories." %
-                package)
+            log.error("No package '%s' found in site-packages directories." %
+                      package)
             return 1
 
 
