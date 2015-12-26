@@ -24,6 +24,8 @@ echo "Syncing contents of $SRC to $DEST..."
 rsync $DRY_RUN -rv --checksum \
     --exclude 00archives \
     --exclude .DS_Store \
+    --exclude .boar \
+    --exclude .kf-mrulist.dat \
     --exclude "*.png" \
     --exclude "*.rst" \
     --exclude "*.rar" \
