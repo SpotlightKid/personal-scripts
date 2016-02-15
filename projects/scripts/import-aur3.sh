@@ -29,10 +29,16 @@ if [ ! -e .gitignore ]; then
     echo src/ >> .gitignore
     echo .AURINFO >> .gitignore
     echo "$PKG/" >> .gitignore
-    echo "$PKG"'*.tar.xz' >> .gitignore
-    echo "$PKG"'*.tar.gz' >> .gitignore
-    echo "$PKG"'*.tar.bz2' >> .gitignore
-    echo "$PKG"'*.src.tar.gz' >> .gitignore
+    echo "$PKG"'-*.tar.xz' >> .gitignore
+    echo "$PKG"'-*.src.tar.gz' >> .gitignore
+    echo "$PKG"'-*.tar.gz' >> .gitignore
+    echo "$PKG"'-*.tar.bz2' >> .gitignore
+fi
+
+if ! grep -q 'Christopher Arndt' PKGBUILD; then
+    echo '# Maintainer: Christopher Arndt <aur -at- chrisarndt -dot- de>' > PKGBUILD.tmp
+    sed -e 's/# Maintainer\s*:/# Contributor:/g' PKGBUILD >> PKGBUILD.tmp
+    mv -f PKGBUILD.tmp PKGBUILD
 fi
 
 makepkg -fc && \
