@@ -5,7 +5,6 @@ if [ -z "$1" ]; then
     return 2
 else
     abc="${@: -1}"
-    shift
     if [ ! -e "$abc" ]; then
         echo "Input file '"$abc"' does not exists."
         return 1
@@ -17,7 +16,7 @@ basefn="${abc##*/}"
 basen="${basefn%.*}"
 TMP="${TMP:-/tmp}"
 PS="$(mktemp "$TMP/abc2pdf-XXXXXX.ps")"
-PDF="${1:-$basen.pdf}"
+PDF="$basen.pdf"
 
 # generate PostScript with abcm2ps
 abcm2ps $ABCM2PS_OPTS -O "$PS" "$@"; ret=$?
