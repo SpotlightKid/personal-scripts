@@ -3,7 +3,8 @@
 # optimize-performance.sh
 #
 
-action="$1:-start"
+action="${1:-start}"
+WLANDEV="wlp6s0"
 
 case "$action" in
     start)
@@ -14,7 +15,7 @@ case "$action" in
         sudo cpupower frequency-set -g performance
 
         # Turn off WiFi
-        sudo iwconfig wlan0 txpower off
+        sudo iwconfig $WLANDEV txpower off
 
         # Disable screen blanking
         xset -dpms; xset s off
@@ -27,7 +28,7 @@ case "$action" in
         sudo cpupower frequency-set -g powersave
 
         # Turn on WiFi
-        sudo iwconfig wlan0 txpower on
+        sudo iwconfig $WLANDEV txpower on
 
         # Enable screen blanking
         xset +dpms; xset s on
