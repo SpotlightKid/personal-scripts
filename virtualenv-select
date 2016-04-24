@@ -1,0 +1,28 @@
+#!/usr/bin/env python
+"""Run either pyvenv or virtualenv depending on the version of Python used."""
+
+import argparse
+import subprocess
+import sys
+
+GET_VERSION_CMD = 'import sys; sys.stdout.write("%i %i" % sys.version_info[:2])'
+
+parser = argparse.ArgumentParser(prog="virtualenv-select", add_help=False)
+parser.add_argument('-p', '--python')
+args, rargs  = parser.parse_known_args(sys.argv[1:])
+
+try:
+    py_ver = tuple(int(v) for v in subprocess.check_output(
+        [args.python or 'python', '-c', GET_VERSION_CMD]).split())
+except subprocess.CalledProcessError:
+    py_ver = None
+
+if py_ver and py_ver >= (3, 3):
+    virtualenv = 'pyvenv-%i.%i' % py_ver
+else:
+    virtualenv = 'virtualenv'
+
+    if args.python:
+        rargs = ['--python=%s' % args.python] + rargs
+
+sys.exit(subprocess.call([virtualenv] + rargs))
