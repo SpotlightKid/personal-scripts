@@ -48,28 +48,28 @@ def remove_comments_and_docstrings(source):
                 # operator:
                 if prev_toktype != tokenize.NEWLINE:
                     # Note regarding NEWLINE vs NL: The tokenize module
-                    # differentiates between newlines that start a new 
-                    # statement and newlines inside of operators such as 
-                    # parentheses, brackets, and curly braces. Newlines 
-                    # inside of operators are NEWLINE tokens and 
+                    # differentiates between newlines that start a new
+                    # statement and newlines inside of operators such as
+                    # parentheses, brackets, and curly braces. Newlines
+                    # inside of operators are NEWLINE tokens and
                     # newlines which start new code are NL tokens.
-                    
+
                     # Catch whole-module docstrings:
                     if start_col > 0:
                         # Unlabelled indentation means we're inside an operator
                         out.append(token_string)
 
-                    # Note regarding the INDENT token: The tokenize module does
-                    # not label indentation inside of an operator (parentheses,
-                    # brackets, and curly braces) as actual indentation.
-                    #
-                    # For example:
-                    #
-                    # def foo():
-                    #     """Whitespace before this docstring is tokenize.INDENT"""
-                    #     test = [
-                    #         "Whitespace before this string does not get a token"
-                    #     ]
+                # Note regarding the INDENT token: The tokenize module does
+                # not label indentation inside of an operator (parentheses,
+                # brackets, and curly braces) as actual indentation.
+                #
+                # For example:
+                #
+                # def foo():
+                #     """Whitespace before this docstring is tokenize.INDENT"""
+                #     test = [
+                #         "Whitespace before this string does not get a token"
+                #     ]
         else:
             out.append(token_string)
 
