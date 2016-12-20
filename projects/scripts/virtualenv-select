@@ -8,7 +8,10 @@ import sys
 GET_VERSION_CMD = 'import sys; sys.stdout.write("%i %i" % sys.version_info[:2])'
 
 parser = argparse.ArgumentParser(prog="virtualenv-select", add_help=False)
-parser.add_argument('-p', '--python')
+parser.add_argument('-p', '--python', metavar='PYTHON_EXE',
+                    help='The Python interpreter to use')
+parser.add_argument('--extra-search-dir', metavar='DIR', action='append',
+                    help='Directory to look for setuptools/pip distributions in')
 args, rargs  = parser.parse_known_args(sys.argv[1:])
 
 try:
@@ -23,6 +26,9 @@ else:
     virtualenv = 'virtualenv'
 
     if args.python:
-        rargs = ['--python=%s' % args.python] + rargs
+        rargs.insert(0, '--python=%s' % args.python)
+    if args.extra_search_dir:
+        rargs.extend(['--extra-search-dir=%s' % dir
+                      for dir in args.extra_search_dir])
 
 sys.exit(subprocess.call([virtualenv] + rargs))
