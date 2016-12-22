@@ -15,11 +15,19 @@ import time
 from operator import itemgetter
 from os.path import basename, splitext
 
-import colorthief
+from colorthief import ColorThief
 from colornames import get_color_name
 
 
 log = logging.getLogger(__file__)
+
+
+def get_palette(filename, max_colors, accuracy):
+    log.info("Reading image file '%s'...", args.image_file)
+    image = ColorThief(filename)
+    log.info("Calculating palette of max. %i colors with accuracy = %i ...",
+             max_colors, accuracy)
+    return image.get_palette(max_colors, accuracy)
 
 
 def luminance(r, g, b):
@@ -63,8 +71,6 @@ def main(args=None):
                     help="Accuracy of algorithm (1=best/slowest, default: %(default)s)")
     ap.add_argument('-c', '--columns', type=int, default=8,
                     help="Number of colors per row (default: %(default)s)")
-    ap.add_argument('-d', '--include-dominant', action='store_true',
-                    help="Include dominant color in palette.")
     ap.add_argument('-l', '--find-names', type=int, metavar='DISTANCE',
                     help="Set label of each color to nearest match from a built-in "
                          "list of about 1500 colors. DISTANCE is the maximum allowed "
@@ -104,28 +110,15 @@ def main(args=None):
         return 2
 
     try:
-        log.info("Reading image file '%s'...", args.image_file)
-        image = colorthief.ColorThief(args.image_file)
-    except Exception as exc:
-        return "Could not open image file '%s': %s" % (args.image_file, exc)
-    else:
         start = time.time()
-        log.info("Calculating palette of max. %i colors...", args.max_colors)
-        palette = image.get_palette(args.max_colors, args.accuracy)
+        log.info("Calculating palette of max. %i colors with accuracy = %i ...",
+                 args.max_colors, args.accuracy)
+        palette = get_palette(args.image_file, args.max_colors, args.accuracy)
+    except Exception as exc:
+        return "Could not process image file '%s': %s" % (args.image_file, exc)
+    else:
         log.debug("Found %i colors in %.2f seconds." %
                   (len(palette), time.time() - start))
-        if args.include_dominant:
-            log.info("Looking for dominant color...")
-            start = time.time()
-            dominant = image.get_color(args.accuracy)
-            log.debug("Found dominant color (%s) in %.2f seconds." %
-                      (", ".join(map(str, dominant)), time.time() - start))
-
-            if dominant not in palette:
-                log.info("Adding dominant color to palette.")
-                palette.insert(0, dominant)
-            else:
-                log.info("Dominant color already included in palette.")
 
     filebase = splitext(basename(args.image_file))[0]
     palette_name = args.palette_name if args.palette_name else filebase
