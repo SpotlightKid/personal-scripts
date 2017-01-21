@@ -88,7 +88,7 @@ class ForMd(object):
         """Convert markdown to the opposite style of the first text link."""
         first_match = re.search(self.match_links, self.text).group(0)
 
-        if '(' and ')' in first_match:
+        if first_match and '(' in first_match and ')' in first_match:
             formd_md = self.ref_md()
         else:
             formd_md = self.inline_md()
@@ -102,19 +102,19 @@ def pythonista_main():
 
     md = clipboard.get()
     if md:
-        console.clear()
         text = ForMd(md)
         md = text.flip()
         clipboard.set(md)
+        console.clear()
         print(md)
 
 
 def main():
     import sys
+
     try:
         with open(sys.argv[1]) as fp:
-            md = fp.read()
-            text = ForMd(md)
+            text = ForMd(fp.read())
             print(text.flip())
     except IndexError:
         sys.exit("Usage: formd.py <markdown file>")
