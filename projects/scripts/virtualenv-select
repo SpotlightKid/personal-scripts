@@ -21,9 +21,9 @@ except subprocess.CalledProcessError:
     py_ver = None
 
 if py_ver and py_ver >= (3, 3):
-    virtualenv = 'pyvenv-%i.%i' % py_ver
+    virtualenv = ['python%i.%i' % py_ver, '-m', 'venv']
 else:
-    virtualenv = 'virtualenv'
+    virtualenv = ['virtualenv']
 
     if args.python:
         rargs.insert(0, '--python=%s' % args.python)
@@ -31,4 +31,4 @@ else:
         rargs.extend(['--extra-search-dir=%s' % dir
                       for dir in args.extra_search_dir])
 
-sys.exit(subprocess.call([virtualenv] + rargs))
+sys.exit(subprocess.call(virtualenv + rargs))
