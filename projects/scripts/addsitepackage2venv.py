@@ -32,6 +32,57 @@ else:
     MODULE_EXTENSIONS += ['.so']
 
 
+def force_global_eggs_after_local_site_packages():
+    """Force easy_installed eggs in the global environment to get
+    placed in sys.path after all packages inside the virtualenv.
+
+    This maintains the "least surprise" result that packages in the
+    virtualenv always mask global packages, never the other way around.
+
+    """
+    egginsert = getattr(sys, '__egginsert', 0)
+    for i, path in enumerate(sys.path):
+        if i > egginsert and path.startswith(sys.prefix):
+            egginsert = i
+    sys.__egginsert = egginsert + 1
+
+
+def virtual_addsitepackages(known_paths):
+    force_global_eggs_after_local_site_packages()
+    sys_prefix = getattr(sys, 'real_prefix', sys.base_prefix)
+    try:
+        return site.addsitepackages(set(known_paths), sys_prefix=sys_prefix) 
+    except:
+        return site.addsitepackages(set(known_paths), (sys_prefix,))
+
+
+def is_pyvenv(venv):
+    return exists(join(venv, 'pyvenv.cfg'))
+
+
+def global_site_packages_enabled(venv):
+    if is_pyvenv(venv):
+        cfg = get_pyvenv_cfg(venv)
+        return cfg.get('include-system-site-packages', '').lower() != 'false'
+    elif exists(venv):
+        venvsitedir = distutils.sysconfig.get_python_lib()
+        return not exists(join(dirname(venvsitedir), 'no-global-site-packages.txt'))
+    return False
+
+
+def get_pyvenv_cfg(venv):
+    cfg = {}
+    try:
+        with open(join(venv, 'pyvenv.cfg')) as cfgfp:
+            for line in cfgfp.readlines():
+                if line.strip():
+                    k, v = line.split('=', 1)
+                    cfg[k.strip()] = v.strip()
+    except (IOError, OSError):
+        pass
+    return cfg
+
+
 def main(args=None):
     argparser = argparse.ArgumentParser()
     argparser.add_argument('-f', '--force',
@@ -62,8 +113,8 @@ def main(args=None):
     else:
         venvsitedir = distutils.sysconfig.get_python_lib()
 
-    if not exists(join(dirname(venvsitedir), 'no-global-site-packages.txt')):
-        log.info("This virtual environment includes system site-packages. "
+    if global_site_packages_enabled(venv):
+        log.info("This virtual environment has global system site-packages enabled. "
                  "Nothing to do.")
         return 1
 
@@ -84,7 +135,7 @@ def main(args=None):
                 if not args.force:
                     return 1
 
-    site.virtual_addsitepackages(set(sys.path))
+    virtual_addsitepackages(sys.path)
 
     for package in args.packages:
         venvpackage = join(venvsitedir, package)
