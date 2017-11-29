@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# encoding=utf8
+# -*- coding: utf-8 -*-
 """Convert Markdown text from inline URL link style to
 reference style and vice-versa.
 
@@ -16,11 +16,11 @@ import re
 from collections import OrderedDict
 
 
-class ForMd(object):
-    """Format Markdown text."""
+class ReformatMarkdownRefs(object):
+    """Reformat links and references in Markdown text."""
 
     def __init__(self, text):
-        super(ForMd, self).__init__()
+        super(ReformatMarkdownRefs, self).__init__()
         self.text = text
         self.match_links = re.compile(r'(\[[^^]*?\])\s?(\[.*?\]|\(.*?\))',
                                       re.DOTALL | re.MULTILINE)
@@ -102,7 +102,7 @@ def pythonista_main():
 
     md = clipboard.get()
     if md:
-        text = ForMd(md)
+        text = ReformatMarkdownRefs(md)
         md = text.flip()
         clipboard.set(md)
         console.clear()
@@ -114,8 +114,9 @@ def main():
 
     try:
         with open(sys.argv[1]) as fp:
-            text = ForMd(fp.read())
-            print(text.flip())
+            text = ReformatMarkdownRefs(fp.read())
+        
+        print(text.flip())
     except IndexError:
         sys.exit("Usage: formd.py <markdown file>")
     except (IOError, OSError) as exc:
