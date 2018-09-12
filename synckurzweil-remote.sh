@@ -10,7 +10,7 @@ fi
 
 
 KURZWEIL_ROOT_LOCAL="$HOME/Dokumente/kurzweil"
-KURZWEIL_ROOT_REMOTE="chrisarndt.de:/home/www/chrisarndt.de/htdocs/files/kurzweil"
+KURZWEIL_ROOT_REMOTE="${1:-chrisarndt.de:/home/www/chrisarndt.de/htdocs/files/kurzweil}"
 SRC="$KURZWEIL_ROOT_LOCAL/k2x"
 DEST="$KURZWEIL_ROOT_REMOTE/sounds/k2x"
 
