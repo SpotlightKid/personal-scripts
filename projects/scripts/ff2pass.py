@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""Convert firefox password export file to input files for pass(1)."""
 
 import logging
 import sys
