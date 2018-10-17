@@ -100,7 +100,7 @@ def main(args=None):
     else:
         output_dir = os.getcwd()
 
-    files.extend([fn for f in args.files if isfile(fn)])
+    files.extend([fn for fn in args.files if isfile(fn)])
     create_m3u(files, output_dir)
 
 
