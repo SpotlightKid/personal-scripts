@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Switch enabled screen between external monitor and internal laptop screen
+#
 
 IN="LVDS1"
 EXT="HDMI1"

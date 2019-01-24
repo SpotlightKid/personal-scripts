@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# optimize-performance.sh
+# optimize-performance.sh - Set all CPU core to 'performance' mode,
+# disable wifi and turn off the screen blanker. Useful when doing
+# audio or video production or watching a DVD / BlueRay.
 #
 
 action="${1:-start}"

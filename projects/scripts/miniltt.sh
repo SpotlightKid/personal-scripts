@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Start the LTT Lighting talk time PyGame application
+#
 
 VENV="${WORKON_HOME:-$HOME/lib/virtualenvs}/pygame"
 

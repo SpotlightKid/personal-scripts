@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# create resized versions of all JPEG images found in current directory in
+# Create resized versions of all JPEG images found in current directory in
 # a subdirectory named after size of the longest side (default 1024).
 
 # enable extended filename patterns

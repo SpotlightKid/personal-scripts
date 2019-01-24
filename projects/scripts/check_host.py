@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+#
+# check_host.py - Simple check if a hosts is up by pinging it
+#
 
 import os
 import sys

@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# abc2pdf.sh - Convert an ABC music file into a PDF score
+#
 
 if [ -z "$1" ]; then
     echo "Usage: abc2pdf [options] <file.abc>"

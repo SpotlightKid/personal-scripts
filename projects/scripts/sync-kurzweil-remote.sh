@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# sync-kurzweil-remote.sh - Sync my Kurzweil file collection to my webserver
+#
 
 if [[ "$1" = "-f" ]]; then
     DRY_RUN=

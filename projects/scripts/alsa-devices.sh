@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# adevices.sh - List ALSA devices and their JACK DBUS driver settings
+# alsa-devices.sh - List ALSA devices and their JACK DBUS driver settings
 #
 
 echo "========================================"

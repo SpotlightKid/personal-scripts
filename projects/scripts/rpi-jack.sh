@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Start JACK on my Raspberry Pi with a M-Audio Fast Track Pro audio interface
+# and run fluidsynth with a General MIDI soundfont or teh one given on the
+# command line
+#
 
 AUDIODEV="hw:1"
 MIDIDEV="FastTrack Pro"
