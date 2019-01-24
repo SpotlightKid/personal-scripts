@@ -7,7 +7,7 @@ else over the years.
 These are mostly small utilities for specific tasks, which probably are of little use to anybody
 else but me and my specific Linux environment. But there are some generally useful scripts, for
 example for generating M3U playlists, managing Python virtual environments, pretty printing some
-file types, sending email from the comand line and so on.
+file types, sending email from the command line and so on.
 
 Check each script for a small description of what it does at the beginning of the file.
 
