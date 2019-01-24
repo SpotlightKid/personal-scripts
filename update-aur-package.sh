@@ -2,6 +2,8 @@
 #
 # update-aur-package.sh - Rebuild AUR package and update repository
 
+set -e
+
 updpkgsums && \
 makepkg -fc && \
 makepkg --printsrcinfo > .SRCINFO
