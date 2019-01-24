@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Start the BOSS BR Wave Converter windows program via wine
+#
 
 BRWC_HOME="$HOME/lib/BRWC310"
 

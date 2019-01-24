@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# sync-kurzweil.sh - Sync my Kurzweil file between my harddrive and the USB stick
+#
 
 # trailing slashes are important!
 SRC="/run/media/chris/UsbStick16G/kurzweil/"

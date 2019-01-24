@@ -1,4 +1,6 @@
-#!/usr/bin/env python
+/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Pretty print an XML file."""
 
 from __future__ import print_function
 

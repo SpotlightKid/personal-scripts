@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Convert an old AUR version 3 repository into a new AUR 4 one
+#
 
 AUR3DIR="$HOME/src/arch/aur"
 AUR4DIR="$HOME/src/arch/aur4"
