@@ -44,8 +44,6 @@ class ReformatMarkdownRefs(object):
         """Process text."""
         links = tuple(self._links())
         refs = self._refs()
-        print(links)
-        print(refs)
 
         for n, link in enumerate(links):
             text, ref = link
