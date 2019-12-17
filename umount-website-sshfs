@@ -1,0 +1,6 @@
+#!/bin/bash
+
+if grep -q mnt/website /proc/mounts; then
+    fusermount -u ~/mnt/website
+fi
+

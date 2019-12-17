@@ -1,0 +1,11 @@
+#!/bin/bash
+
+REMOTE_DIR="/home/www/chrisarndt.de/htdocs"
+MOUNT_POINT="$HOME/mnt/website"
+HOST="chrisarndt.de"
+
+if [ ! -d "$MOUNT_POINT" ]; then
+    mkdir "$MOUNT_POINT"
+fi
+
+sshfs "$HOST:$REMOTE_DIR" "$MOUNT_POINT"
