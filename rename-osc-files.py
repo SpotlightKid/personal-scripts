@@ -35,4 +35,5 @@ def main(path='.', dryrun=True):
 
 
 if __name__ == '__main__':
+    import sys
     main(sys.argv[1])
