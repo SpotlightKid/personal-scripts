@@ -1,14 +1,14 @@
 #!/bin/bash
 
-path="$1"
-shift
-passfile="$PREFIX/$path.gpg"
-check_sneaky_paths "$path"
-
 if [[ "$1" = "-c" ]]; then
     clipboard=1
     shift
 fi
+
+path="$1"
+shift
+passfile="$PREFIX/$path.gpg"
+check_sneaky_paths "$path"
 
 if [[ -f $passfile ]]; then
     if [[ -n "$1" ]]; then
