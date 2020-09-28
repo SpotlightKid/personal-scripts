@@ -1,0 +1,4 @@
+select 0 1 0 1
+set synth.reverb.active 1
+set synth.reverb.level 0.6
+gain 0.7
