@@ -8,6 +8,7 @@ from functools import partial
 from subprocess import DEVNULL, PIPE, run, STDOUT
 from pprint import pprint
 
+__prog__ = "check-bin-depends"
 
 err = partial(print, file=sys.stderr)
 
@@ -21,6 +22,19 @@ def pipe(cmd, input='', stderr=None, **kwargs):
 
 
 def main(args):
+    if not args:
+        sys.exit("Usage: %s [-e <pkg>] <binary>..." % __prog__)
+
+    excludes = set()
+    while True:
+        if len(args) >= 3 and args[0] == "-e":
+            excludes.add(args[1])
+            args.pop(0)
+            args.pop(0)
+        else:
+            break
+
+
     depends = set()
     base_devel = set(line.strip() for line in pipe(['pacman', '-Qqg', 'base-devel']).splitlines())
     #err("\n".join(sorted(base_devel)))
@@ -44,11 +58,16 @@ def main(args):
         if package:
             #err("{} => '{}'".format(lib, package))
             package = package.split('/')[1]
+
+            if package in packages:
+                continue
+
             if package in depends:
-                err("Package '{}' in 'base-devel' group (and dependencies). "
-                    "Ignoring it.".format(package))
-            else:
-                packages.add(package)
+                err("Package '{}' in 'base-devel' group (and dependencies).".format(package))
+            elif package in excludes:
+                err("Package '{}' ignored by exclude list.".format(package))
+                continue
+            packages.add(package)
         else:
             err("Library file '{}' is not owned by any package.".format(path))
 
