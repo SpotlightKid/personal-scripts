@@ -15,12 +15,40 @@ if ! lsmod | grep -q v4l2loopback; then
     sudo modprobe dslr-webcam
 fi
 
-exec gphoto2 \
-        --stdout \
-        --capture-movie | \
-    ffmpeg -i - \
-        -vcodec rawvideo \
-        -pix_fmt yuv420p \
-        -threads 0 \
-        -f v4l2 \
-        ${1:-/dev/video0}
+case "$1" in
+    f|ffmpeg)
+        METHOD="ffmeg"
+        ;;
+    g|gst|gstreamer)
+        METHOD="gstreamer"
+        ;;
+    *)
+        METHOD="gstreamer"
+        ;;
+esac
+
+if [[ "$METHOD" = "ffmpeg" ]]; then
+    exec gphoto2 \
+            --stdout \
+            --capture-movie | \
+        ffmpeg -i - \
+            -vcodec rawvideo \
+            -pix_fmt yuv420p \
+            -threads 0 \
+            -f v4l2 \
+            ${DEVICE:-/dev/video0}
+elif [[ "$METHOD" = "gstreamer" ]]; then
+    exec gphoto2 \
+            --stdout \
+            --capture-movie | \
+        gst-launch-1.0 \
+            fdsrc fd=0 ! \
+            decodebin name=dec ! \
+            queue ! \
+            videoconvert ! \
+            tee ! \
+            v4l2sink device=${DEVICE:-/dev/video0}
+else
+    echo "Unsupported video conversion method $METHOD." >/dev/stderr
+    exit 1
+fi
