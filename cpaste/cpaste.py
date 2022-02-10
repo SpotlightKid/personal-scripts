@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-#
+"""A script to send pastes to https://cpaste.org/."""
+
 #######################################################################
 #
 # A script to paste to https://cpaste.org/
 #
 # Copyright (c) 2013-2019 Andreas Schneider <asn@samba.org>
 # Copyright (c) 2013      Alexander Bokovoy <ab@samba.org>
+# Copyright (c) 2022      Christopher Arndt <info@chrisarndt.de>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,34 +30,38 @@
 # Optionally requires: python-Pygments
 #
 
+import argparse
+import base64
+import json
 import os
 import sys
-import json
-import base64
 import zlib
-import requests
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
-from optparse import OptionParser
 from mimetypes import guess_type
+
+import requests
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 try:
     from pygments.lexers import guess_lexer, guess_lexer_for_filename
+
     guess_lang = True
 except ImportError:
     guess_lang = False
 
+
 def base58_encode(v):
     # 58 char alphabet
-    alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+    alphabet = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     alphabet_len = len(alphabet)
 
     if isinstance(v, str) and not isinstance(v, bytes):
-        v = v.encode('ascii')
+        v = v.encode("ascii")
 
     nPad = len(v)
-    v = v.lstrip(b'\0')
+    v = v.lstrip(b"\0")
     nPad -= len(v)
 
     l = 0
@@ -64,43 +70,49 @@ def base58_encode(v):
             c = ord(c)
         l += c << (8 * i)
 
-    string = b''
+    string = b""
     while l:
         l, idx = divmod(l, alphabet_len)
-        string = alphabet[idx:idx+1] + string
+        string = alphabet[idx : idx + 1] + string
 
-    return (alphabet[0:1] * nPad + string)
+    return alphabet[0:1] * nPad + string
+
 
 def json_encode(d):
-    return json.dumps(d, separators=(',',':')).encode('utf-8')
+    return json.dumps(d, separators=(",", ":")).encode("utf-8")
+
 
 #
 # The encryption format is described here:
 # https://github.com/PrivateBin/PrivateBin/wiki/Encryption-format
 #
-def privatebin_encrypt(paste_passphrase,
-                       paste_password,
-                       paste_plaintext,
-                       paste_formatter,
-                       paste_attachment_name,
-                       paste_attachment,
-                       paste_compress,
-                       paste_burn,
-                       paste_opendicussion):
+def privatebin_encrypt(
+    paste_passphrase,
+    paste_password,
+    paste_plaintext,
+    paste_formatter,
+    paste_attachment_name,
+    paste_attachment,
+    paste_compress,
+    paste_burn,
+    paste_opendicussion,
+):
     if paste_password:
-        paste_passphrase += bytes(paste_password, 'utf-8')
+        paste_passphrase += bytes(paste_password, "utf-8")
 
     # PBKDF
     kdf_salt = bytes(os.urandom(8))
     kdf_iterations = 100000
-    kdf_keysize = 256 # size of resulting kdf_key
+    kdf_keysize = 256  # size of resulting kdf_key
 
     backend = default_backend()
-    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(),
-                     length=int(kdf_keysize / 8), # 256bit
-                     salt=kdf_salt,
-                     iterations=kdf_iterations,
-                     backend=backend)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=int(kdf_keysize / 8),  # 256bit
+        salt=kdf_salt,
+        iterations=kdf_iterations,
+        backend=backend,
+    )
     kdf_key = kdf.derive(paste_passphrase)
 
     # AES-GCM
@@ -115,10 +127,10 @@ def privatebin_encrypt(paste_passphrase,
         compression_type = "zlib"
 
     # compress plaintext
-    paste_data = {'paste': paste_plaintext}
+    paste_data = {"paste": paste_plaintext}
     if paste_attachment_name and paste_attachment:
-        paste_data['attachment'] = paste_attachment
-        paste_data['attachment_name'] = paste_attachment_name
+        paste_data["attachment"] = paste_attachment
+        paste_data["attachment_name"] = paste_attachment_name
         print(paste_attachment_name)
         print(paste_attachment)
 
@@ -130,19 +142,19 @@ def privatebin_encrypt(paste_passphrase,
 
     # Associated data to authenticate
     paste_adata = [
-            [
-                base64.b64encode(cipher_iv).decode("utf-8"),
-                base64.b64encode(kdf_salt).decode("utf-8"),
-                kdf_iterations,
-                kdf_keysize,
-                adata_size,
-                cipher_algo,
-                cipher_mode,
-                compression_type,
-            ],
-            paste_formatter,
-            int(paste_opendicussion),
-            int(paste_burn),
+        [
+            base64.b64encode(cipher_iv).decode("utf-8"),
+            base64.b64encode(kdf_salt).decode("utf-8"),
+            kdf_iterations,
+            kdf_keysize,
+            adata_size,
+            cipher_algo,
+            cipher_mode,
+            compression_type,
+        ],
+        paste_formatter,
+        int(paste_opendicussion),
+        int(paste_burn),
     ]
 
     paste_adata_json = json_encode(paste_adata)
@@ -157,77 +169,88 @@ def privatebin_encrypt(paste_passphrase,
 
     return paste_adata, paste_ciphertext
 
-def privatebin_send(paste_url,
-                    paste_password,
-                    paste_plaintext,
-                    paste_formatter,
-                    paste_attachment_name,
-                    paste_attachment,
-                    paste_compress,
-                    paste_burn,
-                    paste_opendicussion,
-                    paste_expire):
+
+def privatebin_send(
+    paste_url,
+    paste_password,
+    paste_plaintext,
+    paste_formatter,
+    paste_attachment_name,
+    paste_attachment,
+    paste_compress,
+    paste_burn,
+    paste_opendicussion,
+    paste_expire,
+):
     paste_passphrase = bytes(os.urandom(32))
 
-    paste_adata, paste_ciphertext = privatebin_encrypt(paste_passphrase,
-                                                       paste_password,
-                                                       paste_plaintext,
-                                                       paste_formatter,
-                                                       paste_attachment_name,
-                                                       paste_attachment,
-                                                       paste_compress,
-                                                       paste_burn,
-                                                       paste_opendicussion)
+    paste_adata, paste_ciphertext = privatebin_encrypt(
+        paste_passphrase,
+        paste_password,
+        paste_plaintext,
+        paste_formatter,
+        paste_attachment_name,
+        paste_attachment,
+        paste_compress,
+        paste_burn,
+        paste_opendicussion,
+    )
 
     # json payload for the post API
     # https://github.com/PrivateBin/PrivateBin/wiki/API
     payload = {
-            "v": 2,
-            "adata": paste_adata,
-            "ct": paste_ciphertext,
-            "meta": {
-                "expire": paste_expire,
-            }
+        "v": 2,
+        "adata": paste_adata,
+        "ct": paste_ciphertext,
+        "meta": {
+            "expire": paste_expire,
+        },
     }
 
     # http content type
-    headers = {'X-Requested-With': 'JSONHttpRequest'}
+    headers = {"X-Requested-With": "JSONHttpRequest"}
 
-    r = requests.post(paste_url,
-                      data=json_encode(payload),
-                      headers=headers)
+    r = requests.post(paste_url, data=json_encode(payload), headers=headers)
     r.raise_for_status()
 
     try:
         result = r.json()
     except:
-        print('Oops, error: %s' % (r.text))
+        print("Oops, error: {}".format(r.text))
         sys.exit(1)
 
-    paste_status = result['status']
+    paste_status = result["status"]
     if paste_status:
-        paste_message = result['message']
-        print("Oops, error: %s" % paste_message)
+        paste_message = result["message"]
+        print("Oops, error: {}".format(paste_message))
         sys.exit(1)
 
-    paste_id = result['id']
-    paste_url_id = result['url']
-    paste_deletetoken = result['deletetoken']
+    paste_id = result["id"]
+    paste_url_id = result["url"]
+    paste_deletetoken = result["deletetoken"]
 
-    print('Delete paste: %s/?pasteid=%s&deletetoken=%s' % (paste_url, paste_id, paste_deletetoken))
-    print('')
-    print('### Paste (%s): %s%s#%s' %
-          (paste_formatter,
-           paste_url,
-           paste_url_id,
-           base58_encode(paste_passphrase).decode('utf-8')))
+    print(
+        "Delete paste: {}/?pasteid={}&deletetoken={}".format(
+            paste_url, paste_id, paste_deletetoken
+        )
+    )
+    print("")
+    print(
+        "### Paste ({}): {}{}#{}".format(
+            paste_formatter,
+            paste_url,
+            paste_url_id,
+            base58_encode(paste_passphrase).decode("utf-8"),
+        )
+    )
+
 
 def guess_lang_formatter(paste_plaintext, paste_filename=None):
-    paste_formatter = 'plaintext'
+    paste_formatter = "plaintext"
 
     # Map numpy to python because the numpy lexer gives false positives
     # when guessing.
-    lexer_lang_map = {'numpy': 'python'}
+    lexer_lang_map = {"numpy": "python"}
 
     # If we have a filename, try guessing using the more reliable
     # guess_lexer_for_filename function.
@@ -235,8 +258,9 @@ def guess_lang_formatter(paste_plaintext, paste_filename=None):
     lang = None
     if paste_filename:
         try:
-            lang = guess_lexer_for_filename(options.filename,
-                                            paste_plaintext).name.lower()
+            lang = guess_lexer_for_filename(
+                paste_filename, paste_plaintext
+            ).name.lower()
         except:
             print("No guess by filename")
             pass
@@ -247,54 +271,73 @@ def guess_lang_formatter(paste_plaintext, paste_filename=None):
             pass
 
     if lang:
-        if lang == 'markdown':
-            paste_formatter = 'markdown'
-        if lang != 'text only':
-            paste_formatter = 'syntaxhighlighting'
+        if lang == "markdown":
+            paste_formatter = "markdown"
+        if lang != "text only":
+            paste_formatter = "syntaxhighlighting"
 
     return paste_formatter
 
-def main():
-    parser = OptionParser()
 
-    parser.add_option("-f", "--file", dest="filename",
-                          help="Read from a file instead of stdin", metavar="FILE")
-    parser.add_option("-p", "--password", dest="password",
-                      help="Create a password protected paste", metavar="PASSWORD")
-    parser.add_option("-e", "--expire",
-                      action="store", dest="expire", default="1day",
-                      choices=["5min", "10min", "1hour", "1day", "1week", "1month", "1year", "never"],
-                      help="Expiration time of the paste (default: 1day)")
-    parser.add_option("-s", "--sourcecode",
-                      action="store_true", dest="source", default=False,
-                      help="Use source code highlighting")
-    parser.add_option("-m", "--markdown",
-                      action="store_true", dest="markdown", default=False,
-                      help="Parse paste as markdown")
-    parser.add_option("-b", "--burn",
-                      action="store_true", dest="burn", default=False,
-                      help="Burn paste after reading")
-    parser.add_option("-o", "--opendiscussion",
-                      action="store_true", dest="opendiscussion", default=False,
-                      help="Allow discussion for the paste")
-    parser.add_option("-a", "--attachment", dest="attachment",
-                      help="Specify path to a file to attachment to the paste",
-                      metavar="FILE")
+def main(args=None):
+    ap = argparse.ArgumentParser(usage=__doc__.splitlines()[0])
 
-    (options, args) = parser.parse_args()
+    ap.add_argument(
+        "-f",
+        "--file",
+        dest="filename",
+        metavar="FILE",
+        help="Read from a file instead of stdin",
+    )
+    ap.add_argument(
+        "-p", "--password", metavar="PASSWORD", help="Create a password protected paste"
+    )
+    ap.add_argument(
+        "-e",
+        "--expire",
+        default="1day",
+        choices=["5min", "10min", "1hour", "1day", "1week", "1month", "1year", "never"],
+        help="Expiration time of the paste (default: 1day)",
+    )
+    ap.add_argument(
+        "-s",
+        "--sourcecode",
+        action="store_true",
+        dest="source",
+        default=False,
+        help="Use source code highlighting",
+    )
+    ap.add_argument(
+        "-m", "--markdown", action="store_true", help="Parse paste as markdown"
+    )
+    ap.add_argument("-b", "--burn", action="store_true", help="Burn paste after reading")
+    ap.add_argument(
+        "-o",
+        "--opendiscussion",
+        action="store_true",
+        help="Allow discussion for the paste",
+    )
+    ap.add_argument(
+        "-a",
+        "--attachment",
+        metavar="FILE",
+        help="Specify path to a file to attachment to the paste",
+    )
 
-    paste_url = 'https://cpaste.org'
-    paste_formatter = 'plaintext'
+    args = ap.parse_args(args)
+
+    paste_url = "https://cpaste.org"
+    paste_formatter = "plaintext"
     paste_compress = True
-    paste_expire = '1day'
+    paste_expire = "1day"
     paste_opendicussion = 0
     paste_burn = 0
     paste_password = None
     paste_attachment_name = None
     paste_attachment = None
 
-    if options.filename:
-        f = open(options.filename)
+    if args.filename:
+        f = open(args.filename)
         if not f:
             print("Oops, could not open file!")
 
@@ -307,54 +350,56 @@ def main():
         print("Oops, we have no data")
         sys.exit(1)
 
-    if options.burn:
+    if args.burn:
         paste_burn = 1
 
-    if options.opendiscussion:
+    if args.opendiscussion:
         paste_opendiscussion = 1
 
-    if options.source:
-        paste_formatter = 'syntaxhighlighting'
-    elif options.markdown:
-        paste_formatter = 'markdown'
+    if args.source:
+        paste_formatter = "syntaxhighlighting"
+    elif args.markdown:
+        paste_formatter = "markdown"
     elif guess_lang:
-        paste_formatter = guess_lang_formatter(paste_plaintext,
-                                               options.filename)
+        paste_formatter = guess_lang_formatter(paste_plaintext, args.filename)
 
-    if options.expire:
-        paste_expire = options.expire
+    if args.expire:
+        paste_expire = args.expire
 
-    if options.password:
-        paste_password = options.password
+    if args.password:
+        paste_password = args.password
 
-    if options.attachment:
-        paste_attachment_name = os.path.basename(options.attachment)
-        mime = guess_type(options.attachment, strict=False)[0]
+    if args.attachment:
+        paste_attachment_name = os.path.basename(args.attachment)
+        mime = guess_type(args.attachment, strict=False)[0]
         if not mime:
-            mime = 'application/octet-stream'
+            mime = "application/octet-stream"
 
-        f = open(options.attachment)
+        f = open(args.attachment)
         if not f:
             print("Oops, could not open file for attachment!")
 
         data = f.read()
         f.close()
 
-        paste_attachment = 'data:%s;base64,' % (mime)
-        paste_attachment += base64.b64encode(bytes(data, 'utf-8')).decode('utf-8')
+        paste_attachment = "data:{};base64,".format(mime)
+        paste_attachment += base64.b64encode(bytes(data, "utf-8")).decode("utf-8")
 
-    privatebin_send(paste_url,
-                    paste_password,
-                    paste_plaintext,
-                    paste_formatter,
-                    paste_attachment_name,
-                    paste_attachment,
-                    paste_compress,
-                    paste_burn,
-                    paste_opendicussion,
-                    paste_expire)
+    privatebin_send(
+        paste_url,
+        paste_password,
+        paste_plaintext,
+        paste_formatter,
+        paste_attachment_name,
+        paste_attachment,
+        paste_compress,
+        paste_burn,
+        paste_opendicussion,
+        paste_expire,
+    )
 
     sys.exit(0)
 
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
