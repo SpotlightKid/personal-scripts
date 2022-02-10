@@ -2,7 +2,10 @@
 #
 # toggletouchpad.sh - Enable/Disable touchpad device managed via libinput
 #
+# Requires 'xinput' program from package 'xorg-xinput', 'bash', 'awk' and 'grep'.
+#
 
+export LC_ALL=C
 device="$(xinput list --name-only | grep -i touchpad)"
 is_enabled=$(xinput list-props "$device" | awk -F : '/Device Enabled/ {print $2}')
 
