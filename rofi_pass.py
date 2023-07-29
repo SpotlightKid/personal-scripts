@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Display a rofi menu for pass(1) accounts."""
+"""Display a rofi menu for pass accounts."""
 
 import glob
 import os
 import re
+import shlex
 import sys
 from enum import IntEnum
 from os.path import basename, expanduser, join, splitext
@@ -17,9 +18,11 @@ class Command(IntEnum):
     CopyURL = 12
     OpenURL = 13
     ViewData = 14
+    EditAccount = 15
 
 
 CLIPBOARD_TIMEOUT = 45
+TERMINAL = os.environ.get("TERMINAL", "rofi-sensible-terminal")
 ENCODING = "UTF-8"
 FIELD_RX = re.compile(r"^(?P<name>\S.*?)\s*[:=]\s*(?P<value>.*)$")
 KEYBINDINGS = {
@@ -28,14 +31,19 @@ KEYBINDINGS = {
     Command.CopyOTP: ("Copy OTP", "Ctrl-o"),
     Command.CopyURL: ("Copy URL", "Ctrl-u"),
     Command.OpenURL: ("Open URL", "Ctrl-U"),
-    Command.ViewData: ("View data", "Alt-e"),
+    Command.ViewData: ("View data", "Shift-Return"),
+    Command.EditAccount: ("Edit account", "Control-Shift-Return"),
 }
 LOGIN_NAME_FIELDS = ("login", "username", "user", "id", "email", "emailaddress", "account")
 ROFI_SELECT_CMD = [
     "rofi",
     "-dmenu",
     "-no-custom",
+    "-kb-accept-alt",
+    "",
     "-kb-accept-custom",
+    "",
+    "-kb-accept-custom-alt",
     "",
     "-kb-remove-to-sol",
     "",
@@ -48,21 +56,27 @@ ROFI_VIEW_CMD = [
     "rofi",
     "-dmenu",
     "-no-custom",
+    "-kb-accept-custom",
+    "",
+    "-kb-custom-1",
+    "Control-Return",
     "-i",
     "-mesg",
-    "Enter: Copy field data, ESC: Back",
+    "ESC: Back, Return: Copy field data, Control-Return: Copy and back",
     "-p",
     "Field",
     "-normal-window",
 ]
+RUN_IN_TERMINAL_CMD = ["{terminal}", "-e", "{command_string}", "-T", "{title}"]
 URL_FIELDS = ("url", "homepage", "website")
 XCLIP_CMD = ["xclip", "-i", "-selection", "clipboard"]
 
 
 def copy_password(store, account, mode="show"):
-    os.environ["PASSWORD_STORE_DIR"] = store
-    os.environ["PASSWORD_STORE_CLIP_TIME"] = str(CLIPBOARD_TIMEOUT)
-    proc = run(["pass", mode, "-c", account])
+    env = os.environ.copy()
+    env["PASSWORD_STORE_DIR"] = store
+    env["PASSWORD_STORE_CLIP_TIME"] = str(CLIPBOARD_TIMEOUT)
+    proc = run(["pass", mode, "-c", account], env=env)
 
     if proc.returncode == 0:
         show_notification(
@@ -85,6 +99,13 @@ def copy_fieldvalue(store, account, *fieldnames):
         )
 
 
+def edit_account(store, account):
+    env = os.environ.copy()
+    env["PASSWORD_STORE_DIR"] = store
+
+    run_in_terminal(["pass", "edit", account], title=f"Edit account: {account}", env=env)
+
+
 def get_pass_accounts(store):
     return sorted(
         splitext(fn)[0] for fn in glob.glob(join("**", "*.gpg"), root_dir=store, recursive=True)
@@ -92,10 +113,13 @@ def get_pass_accounts(store):
 
 
 def get_account_data(store, account):
-    os.environ["PASSWORD_STORE_DIR"] = store
+    env = os.environ.copy()
+    env["PASSWORD_STORE_DIR"] = store
 
     try:
-        proc = run(["pass", "show", account], capture_output=True, encoding=ENCODING, check=True)
+        proc = run(
+            ["pass", "show", account], capture_output=True, encoding=ENCODING, check=True, env=env
+        )
     except CalledProcessError:
         return {}
 
@@ -122,13 +146,24 @@ def get_fieldvalue(store, account, *fieldnames):
     return None
 
 
-def open_url(store, account):
-    url = get_fieldvalue(store, account, *URL_FIELDS)
+def open_url(store, account, *fieldnames):
+    url = get_fieldvalue(store, account, *fieldnames)
 
     if url:
         run(["xdg-open", url])
     else:
         show_notification("No URL found", f"No URL set for '{account}'.", icon="error")
+
+
+def run_in_terminal(cmd, title="", env=None):
+    subst = {
+        "command": cmd,
+        "command_string": shlex.join(cmd),
+        "title": title,
+        "terminal": TERMINAL,
+    }
+    term_cmd = [item.format(**subst) for item in RUN_IN_TERMINAL_CMD]
+    run(term_cmd, env=env)
 
 
 def select_account(store, account=None):
@@ -157,23 +192,20 @@ def select_account(store, account=None):
         rofi_cmd.append(", ".join(messages))
 
     proc = run(rofi_cmd, input="\n".join(accounts), capture_output=True, encoding=ENCODING)
-
     account = proc.stdout.strip()
+    actions = {
+        Command.CopyPassword: (copy_password,),
+        Command.CopyLogin: (copy_fieldvalue, *LOGIN_NAME_FIELDS),
+        Command.CopyOTP: (copy_password, "otp"),
+        Command.CopyURL: (copy_fieldvalue, *URL_FIELDS),
+        Command.OpenURL: (open_url, *URL_FIELDS),
+        Command.ViewData: (view_data,),
+        Command.EditAccount: (edit_account,),
+    }
+    action = actions.get(proc.returncode)
 
-    if proc.returncode == Command.CopyPassword:
-        copy_password(store, account)
-    elif proc.returncode == Command.CopyLogin:
-        copy_fieldvalue(store, account, *LOGIN_NAME_FIELDS)
-    elif proc.returncode == Command.OpenURL:
-        open_url(store, account)
-    elif proc.returncode == Command.CopyURL:
-        copy_fieldvalue(store, account, *URL_FIELDS)
-    elif proc.returncode == Command.CopyOTP:
-        copy_password(store, account, mode="otp")
-    elif proc.returncode == Command.ViewData:
-        view_data(store, account)
-    else:
-        return proc.returncode
+    if action:
+        return action[0](store, account, *action[1:])
 
 
 def show_notification(summary, body="", icon="info", timeout=10_000):
@@ -185,16 +217,20 @@ def view_data(store, account):
     lines = (f"{key}: {value}" for key, value in data.items())
     proc = run(ROFI_VIEW_CMD, input="\n".join(lines), capture_output=True, encoding=ENCODING)
 
-    if proc.returncode == 0:
+    if proc.returncode in (0, 10):
         value = proc.stdout.split(":", maxsplit=1)[1].strip()
         run(XCLIP_CMD, input=value, encoding=ENCODING)
-    elif proc.returncode == 1:
-        select_account(store, account)
+
+    return proc.returncode in (1, 10)
 
 
 def main():
     store = os.getenv("PASSWORD_STORE_DIR", expanduser("~/.password-store"))
-    return select_account(store)
+    cont = 1
+    while cont:
+        cont = select_account(store)
+
+    return cont
 
 
 if __name__ == "__main__":
