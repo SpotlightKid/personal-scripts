@@ -58,11 +58,15 @@ ROFI_VIEW_CMD = [
     "-no-custom",
     "-kb-accept-custom",
     "",
+    "-kb-accept-alt",
+    "",
     "-kb-custom-1",
+    "Shift-Return",
+    "-kb-custom-2",
     "Control-Return",
     "-i",
     "-mesg",
-    "ESC: Back, Return: Copy field data, Control-Return: Copy and back",
+    "ESC: Back, Return: Copy field value, Shift-Return: Copy &amp; back; Control-Return: Copy &amp; close",
     "-p",
     "Field",
     "-normal-window",
@@ -214,23 +218,34 @@ def show_notification(summary, body="", icon="info", timeout=10_000):
 
 def view_data(store, account):
     data = get_account_data(store, account)
-    lines = (f"{key}: {value}" for key, value in data.items())
-    proc = run(ROFI_VIEW_CMD, input="\n".join(lines), capture_output=True, encoding=ENCODING)
+    lines = "\n".join((f"{key}: {value}" for key, value in data.items()))
 
-    if proc.returncode in (0, 10):
-        value = proc.stdout.split(":", maxsplit=1)[1].strip()
-        run(XCLIP_CMD, input=value, encoding=ENCODING)
+    while True:
+        proc = run(ROFI_VIEW_CMD, input=lines, capture_output=True, encoding=ENCODING)
 
-    return proc.returncode in (1, 10)
+        if proc.returncode in (0, 10, 11):
+            match = FIELD_RX.match(proc.stdout.strip())
+
+            if match:
+                value = match.group("value")
+                run(XCLIP_CMD, input=value, encoding=ENCODING)
+
+        if proc.returncode != 0:
+            break
+
+    if proc.returncode == 10:
+        return account
 
 
 def main():
     store = os.getenv("PASSWORD_STORE_DIR", expanduser("~/.password-store"))
-    cont = 1
-    while cont:
-        cont = select_account(store)
+    cont = None
 
-    return cont
+    while True:
+        cont = select_account(store, cont)
+
+        if not cont:
+            break
 
 
 if __name__ == "__main__":
