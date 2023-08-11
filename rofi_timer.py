@@ -128,6 +128,10 @@ def delete_history_entry(fn, timer):
 def run_timer(history, timer):
     interval, comment = parse_timer(timer)
     minutes = round(timeparse(interval) / 60)
+
+    if not comment:
+        comment = f"Interval: {minutes} minutes ({interval})"
+
     notify_cmd = f"notify-send -i timer 'Timer expired' '{comment}'"
     run(["at", f"now + {minutes} minute"], input=notify_cmd, encoding=ENCODING)
     add_history_entry(history, interval, comment)
