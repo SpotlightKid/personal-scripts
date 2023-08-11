@@ -5,10 +5,11 @@
 # Requires:
 #
 # * rofi
-# * at
+# * systemd
 # * python-pytimeparse
 #
 # Copyright (c) 2023 Christopher Arndt <chris@chrisarndt.de>
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -29,15 +30,15 @@
 
 """Run custom notification timers from a rofi menu."""
 
+import enum
 import os
-from enum import IntEnum
 from os.path import expanduser, join
 from subprocess import run
 
 from pytimeparse import parse as timeparse
 
 
-class Command(IntEnum):
+class Command(enum.IntEnum):
     RunTimer = 0
     DeleteEntry = 10
 
@@ -125,15 +126,30 @@ def delete_history_entry(fn, timer):
         pass
 
 
-def run_timer(history, timer):
+def add_timer_systemd(interval_seconds, cmd, comment):
+    systemd_cmd = [
+        "systemd-run",
+        "--user",
+        "--on-active",
+        str(interval_seconds),
+        "--timer-property=AccuracySec=1{}".format("s" if interval_seconds % 60 else "m"),
+        "--description",
+        comment,
+    ]
+
+    systemd_cmd.extend(cmd)
+    return run(systemd_cmd)
+
+
+def add_timer(history, timer):
     interval, comment = parse_timer(timer)
-    minutes = round(timeparse(interval) / 60)
+    interval_seconds = timeparse(interval)
 
     if not comment:
-        comment = f"Interval: {minutes} minutes ({interval})"
+        comment = f"Timer interval: {interval_seconds}s"
 
-    notify_cmd = f"notify-send -i timer 'Timer expired' '{comment}'"
-    run(["at", f"now + {minutes} minute"], input=notify_cmd, encoding=ENCODING)
+    notify_cmd = ["notify-send", "-i", "timer", "Timer expired", comment]
+    add_timer_systemd(interval_seconds, notify_cmd, comment)
     add_history_entry(history, interval, comment)
 
 
@@ -166,7 +182,7 @@ def select_timer(history, timer=None):
     )
     timer = proc.stdout.strip()
     actions = {
-        Command.RunTimer: (run_timer,),
+        Command.RunTimer: (add_timer,),
         Command.DeleteEntry: (delete_history_entry,),
     }
     action = actions.get(proc.returncode)
@@ -175,7 +191,7 @@ def select_timer(history, timer=None):
         return action[0](history, timer, *action[1:])
 
 
-def main(args=None):
+def main():
     history = join(
         os.environ.get("XDG_CONFIG_HOME", expanduser("~/.config")), "rofi_timer.history"
     )
@@ -190,4 +206,5 @@ def main(args=None):
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main() or 0)
