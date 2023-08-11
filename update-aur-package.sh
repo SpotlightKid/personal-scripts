@@ -16,7 +16,7 @@ if [ "x$ret" = "x" -o "x$ret" = "xy" -o "x$ret" = "xY" ]; then
     sudo pacman -U "$(ls -1tr *pkg.tar.* | tail -n 1)"
 fi
 
-{git status; git diff; } | less
+{ git status; git diff; } | less
 echo -n "Commit and push changes to AUR repository? [y/N] "
 read ret
 if [[ "${ret,,}" = "y" ]]; then
