@@ -4,9 +4,15 @@
 #
 # Requires:
 #
+# * Python 3.8+
 # * rofi
-# * systemd
-# * python-pytimeparse
+# * a [desktop notification server] like e.g. xfce4-notifyd
+# * notify-send (from libnotify)
+# * systemd-run (from systemd)
+# * [pytimeparse]
+#
+# [desktop notification server]: https://wiki.archlinux.org/title/Desktop_notifications#Notification_servers
+# [pytimeparse]: https://pypi.org/project/pytimeparse/
 #
 # Copyright (c) 2023 Christopher Arndt <chris@chrisarndt.de>
 #
@@ -32,8 +38,12 @@
 
 import enum
 import os
-from os.path import expanduser, join
+import re
+import sys
+from dataclasses import dataclass
+from os.path import dirname, exists, expanduser, join
 from subprocess import run
+from typing import Optional
 
 from pytimeparse import parse as timeparse
 
@@ -43,12 +53,25 @@ class Command(enum.IntEnum):
     DeleteEntry = 10
 
 
+# Customizable settings
+DEFAULT_DESCRIPTION = "Timer interval: {timer.interval_seconds}s"
+DEFAULT_ICON = "timer"
+DEFAULT_SOUND = None
 ENCODING = "UTF-8"
 KEYBINDINGS = {
-    Command.RunTimer: ("Run Timer", "Return"),
-    Command.DeleteEntry: ("Delete Entry", "Ctrl-Return"),
+    Command.RunTimer: ("Activate Timer", "Return"),
+    Command.DeleteEntry: ("Delete History Entry", "Ctrl-Return"),
 }
-ROFI_SELECT_CMD = [
+NOTIFICATION_BODY = "{description}"
+NOTIFICATION_COMMAND = "notify-timer"
+NOTIFICATION_SUMMARY = "Timer expired"
+ROFI_SEARCH_LABEL = "Timer"
+
+# No user-customizable settings below
+RX_TIMER = re.compile(r"-?(?P<interval>[^-]+)(\s*-\s*)?((?P<description>.*?)\s*$)?")
+RX_ICON_TAG = re.compile(r"\B#(?P<icon>[-_.0-9a-z]+)")
+RX_SOUND_TAG = re.compile(r"\B\+(?P<sound>[-_.0-9a-z]+)")
+TIMER_SELECT_COMMAND = [
     "rofi",
     "-dmenu",
     "-kb-accept-alt",
@@ -61,101 +84,158 @@ ROFI_SELECT_CMD = [
     "",
     "-i",
     "-p",
-    "Timer",
+    ROFI_SEARCH_LABEL,
     "-normal-window",
+]
+SYSTEMD_RUN_COMMAND = [
+    "systemd-run",
+    "--user",
+    "--on-active",
+    "{interval_seconds}",
+    "--timer-property=AccuracySec={accuracy}",
+    "--description",
+    "{description}",
 ]
 
 
-def parse_timer(timer):
-    if ":" in timer:
-        interval, comment = [x.strip() for x in timer.split(":", 1)]
-    else:
-        interval = timer
-        comment = ""
+@dataclass
+class Timer:
+    interval: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    sound: Optional[str] = None
 
-    return interval, comment
+    @property
+    def interval_seconds(self):
+        return abs(timeparse(self.interval))
+
+    def __str__(self):
+        desc = []
+        if self.description:
+            desc.append(self.description.replace("\n", r"\n").replace("\r", r"\r"))
+
+        if self.icon:
+            desc.append(f"#{self.icon}")
+
+        if self.sound:
+            desc.append(f"+{self.sound}")
+
+        desc = " ".join(desc)
+        return f"{self.interval} - {desc}" if desc else f"{self.interval}"
+
+    @classmethod
+    def from_string(cls, s):
+        icon = sound = None
+        match = RX_TIMER.match(s)
+        if match:
+            interval, description = match.group("interval", "description")
+        else:
+            raise ValueError("Could not parse timer entry.")
+
+        if description:
+            match = RX_ICON_TAG.search(description)
+            if match:
+                icon = match.group("icon")
+                description = RX_ICON_TAG.sub("", description)
+
+            match = RX_SOUND_TAG.search(description)
+            if match:
+                sound = match.group("sound")
+                description = RX_SOUND_TAG.sub("", description)
+
+        inst = cls(
+            interval=interval.strip(), description=description.strip(), icon=icon, sound=sound
+        )
+
+        if not timeparse(interval):
+            raise ValueError("Could not parse timer interval.")
+
+        return inst
 
 
-def format_history_entry(interval, comment):
-    comment = comment.replace("\n", r"\n")
-    comment = comment.replace("\r", r"\r")
-    return f"{interval}: {comment}\n"
+def get_history_path():
+    return join(
+        os.environ.get("XDG_CONFIG_HOME", expanduser("~/.config")), "rofi-timer", "history"
+    )
 
 
-def read_history(fn):
+def read_history():
+    history_path = get_history_path()
     history = []
+
     try:
-        with open(fn) as fp:
+        with open(history_path) as fp:
+            entry = 0
             for line in fp.readlines():
                 if line.strip():
-                    interval, comment = parse_timer(line)
-                    comment = comment.replace(r"\n", "\n")
-                    comment = comment.replace(r"\r", "\r")
-                    history.append((interval, comment))
+                    entry += 1
+                    try:
+                        timer = Timer.from_string(line)
+                    except ValueError as exc:
+                        print(f"Could not read history entry #{entry}: {exc}", file=sys.stderr)
+                    else:
+                        history.append(timer)
     except (IOError, OSError):
         pass
 
-    return reversed(history)
+    return history
 
 
-def add_history_entry(fn, interval, comment):
-    entry = format_history_entry(interval, comment)
+def write_history(timer, delete=False):
+    history_path = get_history_path()
+    entry = str(timer) + "\n"
 
     try:
-        with open(fn, "r+") as fp:
-            for line in fp.readlines():
-                if line == entry:
-                    break
-            else:
+        os.makedirs(dirname(history_path), exist_ok=True)
+
+        try:
+            with open(history_path, "r") as fp:
+                lines = [line for line in fp.readlines() if line != entry]
+        except (IOError, OSError):
+            lines = []
+
+        with open(history_path, "w") as fp:
+            if not delete:
                 fp.write(entry)
-    except (IOError, OSError):
-        pass
 
-
-def delete_history_entry(fn, timer):
-    interval, comment = parse_timer(timer)
-    entry = format_history_entry(interval, comment)
-
-    try:
-        with open(fn, "r") as fp:
-            lines = [line for line in fp.readlines() if line != entry]
-
-        with open(fn, "w") as fp:
             fp.writelines(lines)
-    except (IOError, OSError):
-        pass
+    except (IOError, OSError) as exc:
+        print(f"Could not write history: {exc}", file=sys.stderr)
 
 
-def add_timer_systemd(interval_seconds, cmd, comment):
+def delete_history_entry(timer):
+    write_history(timer, delete=True)
+    return True
+
+
+def add_timer_systemd(timer, cmd):
+    seconds = timer.interval_seconds
     systemd_cmd = [
-        "systemd-run",
-        "--user",
-        "--on-active",
-        str(interval_seconds),
-        "--timer-property=AccuracySec=1{}".format("s" if interval_seconds % 60 else "m"),
-        "--description",
-        comment,
+        item.format(
+            interval_seconds=seconds,
+            description=timer.description,
+            accuracy="1s" if seconds % 60 else "1m",
+        )
+        for item in SYSTEMD_RUN_COMMAND
     ]
-
     systemd_cmd.extend(cmd)
     return run(systemd_cmd)
 
 
-def add_timer(history, timer):
-    interval, comment = parse_timer(timer)
-    interval_seconds = timeparse(interval)
+def activate_timer(timer):
+    description = timer.description or DEFAULT_DESCRIPTION.format(timer=timer)
+    icon = timer.icon or DEFAULT_ICON
+    sound = timer.sound or DEFAULT_SOUND
+    body = NOTIFICATION_BODY.format(timer=timer, description=description)
+    summary = NOTIFICATION_SUMMARY.format(timer=timer)
+    notify_cmd = [NOTIFICATION_COMMAND, summary, body, icon or "", sound or ""]
+    add_timer_systemd(timer, notify_cmd)
+    write_history(timer)
 
-    if not comment:
-        comment = f"Timer interval: {interval_seconds}s"
 
-    notify_cmd = ["notify-send", "-i", "timer", "Timer expired", comment]
-    add_timer_systemd(interval_seconds, notify_cmd, comment)
-    add_history_entry(history, interval, comment)
-
-
-def select_timer(history, timer=None):
-    timers = list(read_history(history))
-    rofi_cmd = ROFI_SELECT_CMD[:]
+def select_timer(timer=None):
+    timers = read_history()
+    rofi_cmd = TIMER_SELECT_COMMAND[:]
     messages = []
 
     for cmd in Command:
@@ -176,35 +256,47 @@ def select_timer(history, timer=None):
 
     proc = run(
         rofi_cmd,
-        input="\n".join([f"{x[0]}:{x[1]}" for x in timers]),
+        input="\n".join([str(timer) for timer in timers]),
         capture_output=True,
         encoding=ENCODING,
     )
-    timer = proc.stdout.strip()
+
     actions = {
-        Command.RunTimer: (add_timer,),
+        Command.RunTimer: (activate_timer,),
         Command.DeleteEntry: (delete_history_entry,),
     }
     action = actions.get(proc.returncode)
 
     if action:
-        return action[0](history, timer, *action[1:])
+        try:
+            timer = Timer.from_string(proc.stdout.strip())
+        except ValueError as exc:
+            show_error("Invalid timer", str(exc))
+        else:
+            return action[0](timer, *action[1:])
 
 
-def main():
-    history = join(
-        os.environ.get("XDG_CONFIG_HOME", expanduser("~/.config")), "rofi_timer.history"
-    )
-    cont = None
+def show_error(title, message):
+    run(["notify-send", "-i", "error", title, message])
 
-    while True:
-        cont = select_timer(history, cont)
 
-        if not cont:
-            break
+def main(args=None):
+    if args:
+        try:
+            timer = Timer.from_string(" ".join(args))
+        except ValueError as exc:
+            return f"Invalid timer: {exc}"
+
+        activate_timer(timer)
+    else:
+        continue_ = None
+
+        while True:
+            continue_ = select_timer(continue_)
+
+            if not continue_:
+                break
 
 
 if __name__ == "__main__":
-    import sys
-
-    sys.exit(main() or 0)
+    sys.exit(main(sys.argv[1:]) or 0)
