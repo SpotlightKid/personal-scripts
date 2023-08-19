@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
 """Freedesktop.org Sound Theme Specification support."""
 
+import logging
 import sys
 
 from dataclasses import dataclass
@@ -10,6 +12,9 @@ from typing import Dict, Optional
 
 from xdg.BaseDirectory import xdg_data_dirs
 from xdg.DesktopEntry import IniFile
+
+
+log = logging.getLogger(__name__)
 
 
 def _get_locale():
@@ -24,8 +29,21 @@ def _get_locale():
     return locale
 
 
-class SoundThemeNotFoundError(Exception):
+class ThemeError(Exception):
+    """Base exception for errors concerning theme loading."""
+
+    pass
+
+
+class SoundThemeNotFoundError(ThemeError):
     """Raised when theme not found."""
+
+    pass
+
+
+class InvalidThemeError(ThemeError):
+    """Raised when loading a theme containing errors."""
+
     pass
 
 
@@ -51,19 +69,29 @@ class SoundTheme:
             index = join(datadir, "sounds", name, "index.theme")
 
             if exists(index):
+                logging.debug("Loading theme %s from %s...", name, index)
                 ini = IniFile(index)
                 get = partial(ini.get, group="Sound Theme")
+                directories = get("Directories", list=True)
+                inherits = get("Inherits", list=True)
+
+                if not directories and not inherits:
+                    raise InvalidThemeError(
+                        "Theme must define a value for either or both the "
+                        "'Directories' and the 'Inherits' key."
+                    )
+
                 theme = cls(
                     name=name,
                     display_name=get("Name", type="localestring"),
                     comment=get("Comment", type="localestring"),
                     directories={},
-                    inherits=get("Inherits", list=True),
+                    inherits=inherits,
                     hidden=get("Hidden", type="boolean"),
                     example=get("Example"),
                 )
 
-                for subdir in get("Directories", list=True):
+                for subdir in directories:
                     theme.directories[subdir] = SoundThemeDirectory(
                         context=ini.get("Context", group=subdir),
                         output_profile=ini.get("OutputProfile", group=subdir),
@@ -86,12 +114,12 @@ def _search_theme_dirs(basedirs, locales, themedir, name):
                 localedir = join(basedir, themedir, locale)
 
                 if not isdir(localedir):
-                    #print(f"Skipping non-existing {localedir}.", file=sys.stderr)
+                    log.debug("Skipping non-existing %s.", localedir)
                     continue
 
                 for fileext in (".disabled", ".oga", ".ogg", ".wav"):
                     filename = join(localedir, basename + fileext)
-                    #print(f"Checking {filename}...", file=sys.stderr)
+                    log.debug("Checking %s...", filename)
 
                     if exists(filename):
                         return filename
@@ -108,8 +136,8 @@ def _lookup_sound(name, basedirs, theme, locales, profile):
     if theme and isinstance(theme, str):
         try:
             theme = SoundTheme.load(theme)
-        except ThemeNotFoundError as exc:
-            return
+        except ThemeError as exc:
+            log.error("Could not load theme %s: %s", theme, exc)
 
     if isinstance(theme, SoundTheme):
         subdirs = tuple(theme.directories)
@@ -122,13 +150,19 @@ def _lookup_sound(name, basedirs, theme, locales, profile):
         for subdir in subdirs:
             if not theme or theme.dir_matches_profile(subdir, profile):
                 themedir = join(theme.name if theme else "", subdir)
+                log.debug(
+                    "Searching theme dir %s (subdir: %s profile: %s) in basedirs.",
+                    themedir,
+                    subdir,
+                    profile,
+                )
                 if filename := _search_theme_dirs(basedirs, locales, themedir, name):
                     return filename
 
 
 def find_sound(soundname, theme="freedesktop", locale=None, profile="stereo"):
     basedirs = (join(d, "sounds") for d in xdg_data_dirs)
-    basedirs = (d for d in basedirs if isdir(d))
+    basedirs = [d for d in basedirs if isdir(d)]
 
     if locale is None:
         locale = _get_locale()
@@ -145,7 +179,10 @@ def find_sound(soundname, theme="freedesktop", locale=None, profile="stereo"):
             locales.append(loc)
 
     if isinstance(theme, str):
-        theme = SoundTheme.load(theme)
+        try:
+            theme = SoundTheme.load(theme)
+        except ThemeError as exc:
+            log.error("Could not load theme %s: %s", theme, exc)
 
     if filename := _lookup_sound(soundname, basedirs, theme, locales, profile):
         return filename
@@ -161,8 +198,19 @@ def find_sound(soundname, theme="freedesktop", locale=None, profile="stereo"):
 
 
 if __name__ == "__main__":
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+    ap.add_argument("soundname", help="Sound name to look up")
+    ap.add_argument("theme", nargs="?", help="Sound theme name")
+
+    args = ap.parse_args()
+
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+
     setlocale(LC_ALL, "")
-    fn = find_sound(sys.argv[1], profile="stereo", theme="freedesktop")
+    fn = find_sound(args.soundname, profile="stereo", theme=args.theme or "freedesktop")
 
     if fn:
         print(fn)
