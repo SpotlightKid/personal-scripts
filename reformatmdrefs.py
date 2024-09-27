@@ -108,6 +108,7 @@ def main():
     import sys
 
     try:
+        fp = None
         if len(sys.argv) > 1:
             fp = open(sys.argv[1], encoding='utf-8')
         else:
@@ -117,9 +118,9 @@ def main():
     except (IOError, OSError) as exc:
         sys.exit("Usage: reformatmdrefs.py <markdown file>" + '\n' + str(exc))
     else:
-        print(text.flip())
+        print(text.inline_md())
     finally:
-        if fp is not sys.stdin:
+        if fp and fp is not sys.stdin:
             fp.close()
 
 
