@@ -7,6 +7,7 @@ arguments.
 
 """
 
+import logging
 import sys
 import socket
 import smtplib
@@ -22,7 +23,7 @@ __copyright__ = "MIT license"
 
 __usage__ = "%(prog)s [OPTIONS] <recipient1> [<recipient2> ...]"
 
-
+log = logging.getLogger(__program__)
 options = dict(
    smtp_host = 'localhost',
    smtp_port = None,
@@ -41,7 +42,7 @@ def send_email(from_addr, to_addrs, msg, host='localhost', port=None, user=None,
     """Send the email via SMTP."""
     error = None
 
-    if usessl:
+    if usessl and not starttls:
         smtp_class = smtplib.SMTP_SSL
         if port is None:
             port = 465
@@ -56,27 +57,31 @@ def send_email(from_addr, to_addrs, msg, host='localhost', port=None, user=None,
 
     try:
         connected = False
+        log.debug("Creating SMTP client instance (%s).", smtp_class.__name__)
         smtp = smtp_class(host, port, timeout=timeout)
+        log.debug("Connection established.")
         connected = True
 
         if starttls:
+            log.debug("Requesting STARTTLS.")
             smtp.starttls()
+            log.debug("Sending EHLO.")
             smtp.ehlo()
 
         if user:
+            log.debug("Attempting login with Basic Auth (user: '%s', password: '%s')", user, password)
             smtp.login(user, password)
 
+        log.debug("Sending mail from '%s' to: %s", from_addr, ",".join(to_addrs))
         smtp.sendmail(from_addr, to_addrs, msg.as_string())
     except KeyboardInterrupt:
         print("\nInterrupted.")
-    except smtplib.SMTPException as exc:
-        error = exc
+    else:
+        log.debug("Mail sent.")
     finally:
         if connected:
+            log.debug("Closing connection.")
             smtp.quit()
-
-    if error:
-        raise error
 
 
 def main(args):
@@ -100,6 +105,9 @@ def main(args):
     ap.add_argument("recipients", nargs="*", help="The mail recipient(s)")
 
     args = ap.parse_args(args=args)
+
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                        format="%(name)s:%(levelname)s:%(asctime)s: %(message)s")
 
     if args.recipients:
         try:
